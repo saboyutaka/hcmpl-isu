@@ -22,8 +22,15 @@ db = Mysql2::Client.new(
 db.query_options.merge!(symbolize_keys: true, database_timezone: :local, application_timezone: :local)
 Thread.current[:isuconp_db] = db
 
-db.query("select id, imgdata, mime from posts order by id asc").to_a.each do |post|
+db.query("select id from posts order by id").to_a.each do |p|
+  print '.'
+  id = p[:id]
+  post = db.query("select imgdata, mime from posts where id = #{id} limit 1").first
   ext = post[:mime].split('/')[1]
-  dist = "../public/image/#{post[:id]}.#{ext}"
+  ext = 'jpg' if ext == 'jpeg'
+  dist = "../public/image/#{id}.#{ext}"
   File.write(dist, post[:imgdata]) unless File.exist?(dist)
 end
+puts ''
+puts 'finished.'
+
