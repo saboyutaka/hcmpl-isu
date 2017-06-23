@@ -52,12 +52,15 @@ module Isuconp
         sql << 'UPDATE users SET del_flg = 0'
         sql << 'UPDATE users SET del_flg = 1 WHERE id % 50 = 0'
         sql.each do |s|
-          db.prepare(s).execute
+          db.query(s)
         end
       end
 
       def try_login(account_name, password)
-        user = db.prepare('SELECT * FROM users WHERE account_name = ? AND del_flg = 0').execute(account_name).first
+        query = <<~SQL
+          SELECT * FROM users WHERE account_name = '#{account_name}' AND del_flg = 0
+        SQL
+        user = db.query(query).first
 
         if user && calculate_passhash(user[:account_name], password) == user[:passhash]
           return user
@@ -91,9 +94,7 @@ module Isuconp
 
       def get_session_user()
         if session[:user]
-          db.prepare('SELECT * FROM `users` WHERE `id` = ?').execute(
-            session[:user][:id]
-          ).first
+          db.query("SELECT * FROM `users` WHERE `id` = #{session[:user][:id]}").first
         else
           nil
         end
@@ -102,27 +103,19 @@ module Isuconp
       def make_posts(results, all_comments: false)
         posts = []
         results.to_a.each do |post|
-          post[:comment_count] = db.prepare('SELECT COUNT(*) AS `count` FROM `comments` WHERE `post_id` = ?').execute(
-            post[:id]
-          ).first[:count]
+          post[:comment_count] = db.query("SELECT COUNT(*) AS `count` FROM `comments` WHERE `post_id` = #{post[:id]}").first[:count]
 
-          query = 'SELECT * FROM `comments` WHERE `post_id` = ? ORDER BY `created_at` DESC'
+          query = "SELECT * FROM `comments` WHERE `post_id` = #{post[:id]} ORDER BY `created_at` DESC"
           unless all_comments
             query += ' LIMIT 3'
           end
-          comments = db.prepare(query).execute(
-            post[:id]
-          ).to_a
+          comments = db.query(query).to_a
           comments.each do |comment|
-            comment[:user] = db.prepare('SELECT * FROM `users` WHERE `id` = ?').execute(
-              comment[:user_id]
-            ).first
+            comment[:user] = db.query("SELECT * FROM `users` WHERE `id` = #{comment[:user_id]}").first
           end
           post[:comments] = comments.reverse
 
-          post[:user] = db.prepare('SELECT * FROM `users` WHERE `id` = ?').execute(
-            post[:user_id]
-          ).first
+          post[:user] = db.query("SELECT * FROM `users` WHERE `id` = #{post[:user_id]}").first
 
           posts.push(post) if post[:user][:del_flg] == 0
           break if posts.length >= POSTS_PER_PAGE
@@ -197,7 +190,7 @@ module Isuconp
         return
       end
 
-      user = db.prepare('SELECT 1 FROM users WHERE `account_name` = ?').execute(account_name).first
+      user = db.query("SELECT 1 FROM users WHERE `account_name` = '#{account_name}'").first
       if user
         flash[:notice] = 'アカウント名がすでに使われています'
         redirect '/register', 302
@@ -232,26 +225,18 @@ module Isuconp
     end
 
     get '/@:account_name' do
-      user = db.prepare('SELECT * FROM `users` WHERE `account_name` = ? AND `del_flg` = 0').execute(
-        params[:account_name]
-      ).first
+      user = db.query("SELECT * FROM `users` WHERE `account_name` = '#{params[:account_name]}' AND `del_flg` = 0").first
 
       if user.nil?
         return 404
       end
 
-      results = db.prepare('SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` WHERE `user_id` = ? ORDER BY `created_at` DESC').execute(
-        user[:id]
-      )
+      results = db.query("SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` WHERE `user_id` = #{user[:id]} ORDER BY `created_at` DESC")
       posts = make_posts(results)
 
-      comment_count = db.prepare('SELECT COUNT(*) AS count FROM `comments` WHERE `user_id` = ?').execute(
-        user[:id]
-      ).first[:count]
+      comment_count = db.query("SELECT COUNT(*) AS count FROM `comments` WHERE `user_id` = #{user[:id]}").first[:count]
 
-      post_ids = db.prepare('SELECT `id` FROM `posts` WHERE `user_id` = ?').execute(
-        user[:id]
-      ).map{|post| post[:id]}
+      post_ids = db.query("SELECT `id` FROM `posts` WHERE `user_id` = #{user[:id]}").map{|post| post[:id]}
       post_count = post_ids.length
 
       commented_count = 0
@@ -269,18 +254,15 @@ module Isuconp
 
     get '/posts' do
       max_created_at = params['max_created_at']
-      results = db.prepare('SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` WHERE `created_at` <= ? ORDER BY `created_at` DESC').execute(
-        max_created_at.nil? ? nil : Time.iso8601(max_created_at).localtime
-      )
+      max = max_created_at.nil? ? nil : Time.iso8601(max_created_at).localtime
+      results = db.query("SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` WHERE `created_at` <= '#{max}' ORDER BY `created_at` DESC")
       posts = make_posts(results)
 
       erb :posts, layout: false, locals: { posts: posts }
     end
 
     get '/posts/:id' do
-      results = db.prepare('SELECT * FROM `posts` WHERE `id` = ?').execute(
-        params[:id]
-      )
+      results = db.query("SELECT * FROM `posts` WHERE `id` = #{params[:id]}")
       posts = make_posts(results, all_comments: true)
 
       return 404 if posts.length == 0
@@ -344,7 +326,7 @@ module Isuconp
         return ""
       end
 
-      post = db.prepare('SELECT * FROM `posts` WHERE `id` = ?').execute(params[:id].to_i).first
+      post = db.query("SELECT * FROM `posts` WHERE `id` = #{params[:id]}").first
 
       if (params[:ext] == "jpg" && post[:mime] == "image/jpeg") ||
           (params[:ext] == "png" && post[:mime] == "image/png") ||
@@ -413,10 +395,10 @@ module Isuconp
         return 422
       end
 
-      query = 'UPDATE `users` SET `del_flg` = ? WHERE `id` = ?'
-
       params['uid'].each do |id|
-        db.prepare(query).execute(1, id.to_i)
+        db.query("UPDATE `users` SET `del_flg` = 1 WHERE `id` = #{id.to_i}")
+        db.query("UPDATE `posts` LEFT JOIN `users` ON `posts`.`user_id` = `users`.`id` SET `posts`.`del_flg` = '1' WHERE `users`.`id` = #{id.to_i}")
+
       end
 
       redirect '/admin/banned', 302
