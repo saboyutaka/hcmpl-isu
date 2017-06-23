@@ -15,7 +15,7 @@ restart: ## Restart Server
 	@sudo systemctl restart isu-ruby
 	@echo 'Restart isu-ruby'
 
-db-restart: ## Restart mysql
+mysql-restart: ## Restart mysql
 	@sudo service mysql restart
 	@echo 'Restart mysql'
 
