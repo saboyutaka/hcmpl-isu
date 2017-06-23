@@ -2,6 +2,7 @@ require 'sinatra/base'
 require 'mysql2'
 require 'rack-flash'
 require 'shellwords'
+require 'fileutils'
 require 'rack-lineprof'
 require 'pry-byebug'
 
@@ -56,6 +57,7 @@ module Isuconp
         sql.each do |s|
           db.query(s)
         end
+        Dir.glob('../public/image/*').select {|file| file.scan(/\d+/).pop.to_i > 10000 }.each {|path| FileUtils.rm(path) }
       end
 
       def try_login(account_name, password)
@@ -298,20 +300,22 @@ module Isuconp
           redirect '/', 302
         end
 
-        if params['file'][:tempfile].read.length > UPLOAD_LIMIT
+        if params['file'][:tempfile].size > UPLOAD_LIMIT
           flash[:notice] = 'ファイルサイズが大きすぎます'
           redirect '/', 302
         end
 
-        params['file'][:tempfile].rewind
-        query = 'INSERT INTO `posts` (`user_id`, `mime`, `imgdata`, `body`) VALUES (?,?,?,?)'
+        query = 'INSERT INTO `posts` (`user_id`, `mime`, `body`) VALUES (?,?,?)'
         db.prepare(query).execute(
           me[:id],
           mime,
-          params["file"][:tempfile].read,
           params["body"],
         )
+        ext = mime.split('/')[1]
         pid = db.last_id
+        src = params['file'][:tempfile].path
+        dist = "../public/image/#{pid}.#{ext}"
+        FileUtils.mv(src, dist)
 
         redirect "/posts/#{pid}", 302
       else
