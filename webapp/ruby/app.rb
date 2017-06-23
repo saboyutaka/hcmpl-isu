@@ -312,6 +312,7 @@ module Isuconp
           params["body"],
         )
         ext = mime.split('/')[1]
+        ext = 'jpg' if ext == 'jpeg'
         pid = db.last_id
         src = params['file'][:tempfile].path
         dist = "../public/image/#{pid}.#{ext}"
