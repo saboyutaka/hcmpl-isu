@@ -51,6 +51,7 @@ module Isuconp
         sql << 'DELETE FROM comments WHERE id > 100000'
         sql << 'UPDATE users SET del_flg = 0'
         sql << 'UPDATE users SET del_flg = 1 WHERE id % 50 = 0'
+        sql << 'UPDATE `posts` LEFT JOIN `users` ON `posts`.`user_id` = `users`.`id` SET `posts`.`del_flg` = "1" WHERE `users`.`del_flg` = "1"'
         sql.each do |s|
           db.query(s)
         end
@@ -117,8 +118,7 @@ module Isuconp
 
           post[:user] = db.query("SELECT * FROM `users` WHERE `id` = #{post[:user_id]}").first
 
-          posts.push(post) if post[:user][:del_flg] == 0
-          break if posts.length >= POSTS_PER_PAGE
+          posts.push(post)
         end
 
         posts
@@ -217,10 +217,8 @@ module Isuconp
 
     get '/' do
       me = get_session_user()
-
-      results = db.query('SELECT `id`, `user_id`, `body`, `created_at`, `mime` FROM `posts` ORDER BY `created_at` DESC')
+      results = db.query("SELECT `id`, `user_id`, `body`, `posts`.`created_at`, `mime` FROM `posts` WHERE `del_flg` = 0 ORDER BY `created_at` DESC LIMIT #{POSTS_PER_PAGE}")
       posts = make_posts(results)
-
       erb :index, layout: :layout, locals: { posts: posts, me: me }
     end
 
@@ -255,14 +253,14 @@ module Isuconp
     get '/posts' do
       max_created_at = params['max_created_at']
       max = max_created_at.nil? ? nil : Time.iso8601(max_created_at).localtime
-      results = db.query("SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` WHERE `created_at` <= '#{max}' ORDER BY `created_at` DESC")
+      results = db.query("SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` WHERE `del_flg` = 0 AND `created_at` <= '#{max}' ORDER BY `created_at` DESC")
       posts = make_posts(results)
 
       erb :posts, layout: false, locals: { posts: posts }
     end
 
     get '/posts/:id' do
-      results = db.query("SELECT * FROM `posts` WHERE `id` = #{params[:id]}")
+      results = db.query("SELECT * FROM `posts` WHERE `id` = #{params[:id]} AND `del_flg` = 0")
       posts = make_posts(results, all_comments: true)
 
       return 404 if posts.length == 0
