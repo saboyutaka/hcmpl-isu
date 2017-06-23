@@ -317,6 +317,7 @@ module Isuconp
         src = params['file'][:tempfile].path
         dist = "../public/image/#{pid}.#{ext}"
         FileUtils.mv(src, dist)
+        FileUtils.chmod(0644, dist)
 
         redirect "/posts/#{pid}", 302
       else
