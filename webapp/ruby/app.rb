@@ -232,7 +232,7 @@ module Isuconp
         return 404
       end
 
-      results = db.query("SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` WHERE `user_id` = #{user[:id]} ORDER BY `created_at` DESC")
+      results = db.query("SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` WHERE `user_id` = #{user[:id]} ORDER BY `created_at` DESC LIMIT #{POST_PER_PAGE}")
       posts = make_posts(results)
 
       comment_count = db.query("SELECT COUNT(*) AS count FROM `comments` WHERE `user_id` = #{user[:id]}").first[:count]
@@ -256,14 +256,14 @@ module Isuconp
     get '/posts' do
       max_created_at = params['max_created_at']
       max = max_created_at.nil? ? nil : Time.iso8601(max_created_at).localtime
-      results = db.query("SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` WHERE `del_flg` = 0 AND `created_at` <= '#{max}' ORDER BY `created_at` DESC")
+      results = db.query("SELECT `id`, `user_id`, `body`, `mime`, `created_at` FROM `posts` WHERE `del_flg` = 0 AND `created_at` <= '#{max}' ORDER BY `created_at` DESC LIMIT LIMIT #{POST_PER_PAGE}")
       posts = make_posts(results)
 
       erb :posts, layout: false, locals: { posts: posts }
     end
 
     get '/posts/:id' do
-      results = db.query("SELECT * FROM `posts` WHERE `id` = #{params[:id]} AND `del_flg` = 0")
+      results = db.query("SELECT * FROM `posts` WHERE `id` = #{params[:id]} AND `del_flg` = 0 LIMIT 1")
       posts = make_posts(results, all_comments: true)
 
       return 404 if posts.length == 0
